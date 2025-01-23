@@ -1,0 +1,301 @@
+#include <PS2X_lib.h>
+#include <Servo.h>
+PS2X ps2x;
+Servo servo1; //shoulder joint
+Servo servo2; //shoulder joint
+Servo servo3; //elbow joint
+Servo servo4; //elbow joint
+Servo servo5; //wrist joint
+Servo servo6; //wrist joint
+Servo servo7; //bottom plate
+Servo servo8; //Claw
+int fin1 = 5;
+int fin2 = 7;
+int fin3 = 4;
+int fin4 = 2;
+int fEna = A0;
+int fEnb = A1;
+
+int bin1 = 8;
+int bin2 = 9;
+int bin3 = 10;
+int bin4 = 11;
+int bEna = A2;
+int bEnb = A3;
+//right now, the library does NOT support hot-pluggable controllers, meaning
+//you must always either restart your Arduino after you connect the controller,
+//or call config_gamepad(pins) again after connecting the controller.
+
+int error = 0;
+byte type = 0;
+byte vibrate = 0;
+int pos = 60; //All pos are set to 90 as to not create any position issue. Pos for elbow joint
+int pos2 = 180; //Pos for shoulder joint
+int pos3 = 90; //Pos for wrist joint
+int pos4 = 90; //Pos for bottom plate
+int pos5 = 90; //Pos for claw
+int servospeed = 4;
+int maxdeg = 180;
+int mindeg = 0;
+void setup() {
+  Serial.begin(57600); //Setting baud rate to the standard for ps2 DualShock Controller
+  servo1.attach(23); //Working
+  servo2.attach(24);
+  servo3.attach(22); 
+  servo4.attach(26);
+  servo5.attach(27);
+  servo6.attach(28);
+  servo7.attach(25);
+  servo8.attach(29);
+
+while(true)
+{
+  servo1.write(pos);
+  servo2.write(pos);
+  servo3.write(pos2);
+  servo4.write(pos2);
+  servo5.write(pos3);
+  servo6.write(pos3);
+  servo7.write(pos4);
+  servo8.write(pos5); //Setting start pos for every servo
+  delay(50); //Allow servos time to set into position
+  break;
+}
+
+  pinMode(fin1, OUTPUT);
+  pinMode(fin2, OUTPUT);
+  pinMode(fin3, OUTPUT);
+  pinMode(fin4, OUTPUT);
+  pinMode(fEna, OUTPUT);
+  pinMode(fEnb, OUTPUT);
+
+  pinMode(bin1, OUTPUT);
+  pinMode(bin2, OUTPUT);
+  pinMode(bin3, OUTPUT);
+  pinMode(bin4, OUTPUT);
+  pinMode(bEna, OUTPUT);
+  pinMode(bEnb, OUTPUT);
+  error = ps2x.config_gamepad(13, 12, A5, A4, true, true); //GamePad(clock, command, attention, data, Pressures?, Rumble?)
+  if (error == 0) { //Controller check
+    Serial.println("Found Controller, configured successful");
+    Serial.println("Try out all the buttons, X will vibrate the controller, faster as you press harder;");
+    Serial.println("holding L1 or R1 will print out the analog stick values.");
+    Serial.println("Go to www.billporter.info for updates and to report bugs.");
+  }
+
+  else if (error == 1)
+    Serial.println("No controller found, check wiring, see readme.txt to enable debug. visit www.billporter.info for troubleshooting tips");
+
+  else if (error == 2)
+    Serial.println("Controller found but not accepting commands. see readme.txt to enable debug. Visit www.billporter.info for troubleshooting tips");
+
+  else if (error == 3)
+    Serial.println("Controller refusing to enter Pressures mode, may not support it. ");
+
+  type = ps2x.readType();
+  switch (type) {
+    case 0:
+      Serial.println("Unknown Controller type");
+      break;
+    case 1:
+      Serial.println("DualShock Controller Found"); //Found controller
+      break;
+  }
+
+}
+
+void loop() {
+  /* You must Read Gamepad to get new values
+    Read GamePad and set vibration values
+    ps2x.read_gamepad(small motor on/off, larger motor strenght from 0-255)
+    if you don't enable the rumble, use ps2x.read_gamepad(); with no values
+
+    you should call this at least once a second
+  */
+
+  if (error == 1)
+    return;
+
+  else { //DualShock Controller
+
+    ps2x.read_gamepad(false, vibrate);          //read controller and set large motor to spin at 'vibrate' speed
+
+    if (ps2x.Button(PSB_PAD_UP) && pos2 <= maxdeg) {        //will be TRUE as long as button is pressed
+      Serial.print("Up held this hard: ");
+      pos2 += servospeed;
+      servo3.write(pos2);
+      servo4.write(180-pos2);
+      Serial.println(pos2);
+      Serial.println(ps2x.Analog(PSAB_PAD_UP), DEC);
+    }
+    else if (ps2x.Button(PSB_PAD_DOWN) && pos2 >= mindeg) { //Using else if to prevent the use of both up and down
+      Serial.print("DOWN held this hard: ");
+      pos2 -= servospeed;
+      servo3.write(pos2);
+      servo4.write(180-pos2);
+      Serial.println(ps2x.Analog(PSAB_PAD_DOWN), DEC);
+      Serial.println(pos2);
+    }
+
+    vibrate = ps2x.Analog(PSAB_BLUE); //this will set the large motor vibrate speed based on
+    if (ps2x.NewButtonState(PSB_BLUE)) //will be TRUE if button was JUST pressed OR released
+      Serial.println("X just changed");
+      
+    //Reads controller stick values
+    int yleftstick = ps2x.Analog(PSS_LY);
+    int xleftstick = ps2x.Analog(PSS_LX);
+    int yrightstick = ps2x.Analog(PSS_RY);
+    int xrightstick = ps2x.Analog(PSS_RX);
+
+    //Wheel movement functions are called here
+    if (yrightstick < 140 && yrightstick > 115 && xrightstick < 140 && xrightstick > 115 ) {
+      noMovement();
+      Serial.println(pos);
+    }
+    else if (yrightstick > 190 && xrightstick < 150 && xrightstick > 100) { //FORWARD
+      forward();
+      Serial.println(yrightstick);
+    }
+    else if (yrightstick < 90 && xrightstick < 150 && xrightstick > 100) { //BACKWARD
+      backward();
+      Serial.println(yrightstick);
+    }
+    else if (xrightstick > 190 && yrightstick < 150 && yrightstick > 100) { //RIGHTROTATION
+      right();
+      Serial.println(xrightstick);
+    }
+    else if (xrightstick < 90 && yrightstick < 150 && yrightstick > 100) { //LEFTROTATION
+      left();
+      Serial.println(xrightstick);
+    }
+
+
+    if (yleftstick > 190 && pos <= maxdeg) {
+      pos += servospeed;
+      servo1.write(pos);
+      servo2.write(180-pos);
+      Serial.print("OK!");
+    }
+    else if (yleftstick < 50 && pos >= mindeg) {
+      pos -= servospeed;
+      servo1.write(pos);
+      servo2.write(180-pos);
+    }
+    if (ps2x.Button(PSB_R2) && pos3 >= mindeg) {
+      pos3 -= servospeed;
+      servo5.write(pos3);
+      servo6.write(180-pos3);
+    }
+    else if (ps2x.Button(PSB_L2) && pos3 <= maxdeg) {
+      pos3 += servospeed;
+      servo5.write(pos3);
+      servo6.write(180-pos3);
+    }
+
+    if (xleftstick > 190 && pos4 >= mindeg) {
+      pos4 -= servospeed;
+      servo7.write(pos4);
+    }
+    else if (xleftstick < 50 && pos4 <= maxdeg) {
+      pos4 += servospeed;
+      servo7.write(pos4);
+    }
+    if (ps2x.Button(PSB_R1) && pos5 <= 130) {
+      pos5 += 8;
+      servo8.write(pos5);
+    }
+    else if (ps2x.Button(PSB_L1) && pos5 >= mindeg) {
+      pos5 -= 8;
+      servo8.write(pos5);
+    }
+  }
+
+  //Serial.println(pos2);
+  delay(50);
+
+}
+
+void forward()
+{
+  digitalWrite(fin1, HIGH); //FRONT RIGHT
+  digitalWrite(fin2, LOW);
+  digitalWrite(fin3, HIGH);  //FRONT LEFT
+  digitalWrite(fin4, LOW);
+  digitalWrite(fEna, 100);
+  digitalWrite(fEnb, 100);
+
+  digitalWrite(bin1, HIGH); //BACK RIGHT
+  digitalWrite(bin2, LOW);
+  digitalWrite(bin3, HIGH); //BACK LEFT
+  digitalWrite(bin4, LOW);
+  digitalWrite(bEna, 100);
+  digitalWrite(bEnb, 100);
+}
+
+void backward()
+{
+  digitalWrite(fin1, LOW); //FRONT RIGHT
+  digitalWrite(fin2, HIGH);
+  digitalWrite(fin3, LOW);  //FRONT LEFT
+  digitalWrite(fin4, HIGH);
+  digitalWrite(fEna, 100);
+  digitalWrite(fEnb, 100);
+
+  digitalWrite(bin1, LOW); //BACK RIGHT
+  digitalWrite(bin2, HIGH);
+  digitalWrite(bin3, LOW); //BACK LEFT
+  digitalWrite(bin4, HIGH);
+  digitalWrite(bEna, 100);
+  digitalWrite(bEnb, 100);
+}
+
+void right()
+{
+  digitalWrite(fin1, HIGH); //FRONT RIGHT
+  digitalWrite(fin2, LOW);
+  digitalWrite(fin3, LOW);  //FRONT LEFT
+  digitalWrite(fin4, HIGH);
+  digitalWrite(fEna, 100);
+  digitalWrite(fEnb, 100);
+
+  digitalWrite(bin1, LOW); //BACK RIGHT
+  digitalWrite(bin2, HIGH);
+  digitalWrite(bin3, HIGH); //BACK LEFT
+  digitalWrite(bin4, LOW);
+  digitalWrite(bEna, 100);
+  digitalWrite(bEnb, 100);
+}
+
+void left()
+{
+  digitalWrite(fin1, LOW); //FRONT RIGHT
+  digitalWrite(fin2, HIGH);
+  digitalWrite(fin3, HIGH);  //FRONT LEFT
+  digitalWrite(fin4, LOW);
+  //digitalWrite(fEna, 100);
+  //digitalWrite(fEnb, 100);
+
+  digitalWrite(bin1, HIGH); //BACK RIGHT
+  digitalWrite(bin2, LOW);
+  digitalWrite(bin3, LOW); //BACK LEFT
+  digitalWrite(bin4, HIGH);
+  //digitalWrite(bEna, 100);
+  //digitalWrite(bEnb, 100);
+}
+
+void noMovement() {
+  digitalWrite(fin1, LOW); //FRONT RIGHT
+  digitalWrite(fin2, LOW);
+  digitalWrite(fin3, LOW);  //FRONT LEFT
+  digitalWrite(fin4, LOW);
+  //digitalWrite(fEna, 100);
+  //digitalWrite(fEnb, 100);
+
+  digitalWrite(bin1, LOW); //BACK RIGHT
+  digitalWrite(bin2, LOW);
+  digitalWrite(bin3, LOW); //BACK LEFT
+  digitalWrite(bin4, LOW);
+  //digitalWrite(bEna, 100);
+  //digitalWrite(bEnb, 100);
+
+}
